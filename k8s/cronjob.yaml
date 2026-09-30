@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ops-logrotate
+spec:
+  # nightly log rotation
+  schedule: "0 3 * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: logrotate
+              # placeholder registry — build from docker/Dockerfile.ops-runner and retag
+              image: registry.example.com/ops-runner:latest
+              imagePullPolicy: IfNotPresent
+              command: ["python3"]
+              args: ["ops/log_rotation.py", "/var/log/app", "--days", "7"]
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 200m
+                  memory: 256Mi
+              volumeMounts:
+                - name: applogs
+                  mountPath: /var/log/app
+          volumes:
+            - name: applogs
+              # replace with the real log volume for your cluster
+              emptyDir: {}

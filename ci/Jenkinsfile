@@ -1,0 +1,105 @@
+// Declarative pipeline for cloud-ops-cicd-framework.
+// Secrets come from the Jenkins credentials store — nothing is hardcoded.
+pipeline {
+  agent any
+
+  parameters {
+    booleanParam(
+      name: 'DRY_RUN',
+      defaultValue: true,
+      description: 'Run Ansible with --check and skip docker image builds'
+    )
+    string(
+      name: 'ANSIBLE_LIMIT',
+      defaultValue: 'all',
+      description: 'Value passed to ansible-playbook --limit'
+    )
+    booleanParam(
+      name: 'RUN_SONAR',
+      defaultValue: true,
+      description: 'Run the SonarQube analysis stage'
+    )
+  }
+
+  environment {
+    // Jenkins credential id; resolved at runtime, never stored in the repo
+    SONAR_TOKEN = credentials('sonarqube-token')
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Lint') {
+      steps {
+        sh 'python3 -m py_compile $(find ops tests -name "*.py")'
+        sh 'bash -n scripts/healthcheck.sh scripts/backup.sh'
+        sh '''
+          python3 -c "import yaml, glob; \
+            [yaml.safe_load(open(f)) for f in \
+             glob.glob('ansible/**/*.yml', recursive=True) + glob.glob('k8s/*.yaml')]"
+        '''
+      }
+    }
+
+    stage('Unit tests') {
+      steps {
+        sh 'python3 -m pytest tests/ -q'
+      }
+    }
+
+    stage('SonarQube analysis') {
+      when { expression { return params.RUN_SONAR } }
+      steps {
+        sh '''
+          sonar-scanner \
+            -Dsonar.projectKey=cloud-ops-cicd-framework \
+            -Dsonar.login="$SONAR_TOKEN"
+        '''
+      }
+    }
+
+    stage('Checkov IaC scan') {
+      steps {
+        sh 'checkov -d ansible -d k8s --framework ansible,kubernetes --quiet'
+      }
+    }
+
+    stage('Ansible syntax check') {
+      steps {
+        sh 'ansible-playbook --syntax-check ansible/playbooks/patching.yml'
+        sh 'ansible-playbook --syntax-check ansible/playbooks/hardening.yml'
+      }
+    }
+
+    stage('Ansible dry-run') {
+      when { expression { return params.DRY_RUN } }
+      steps {
+        sh 'ansible-playbook -i ansible/inventory.ini.example ansible/playbooks/patching.yml --limit "$ANSIBLE_LIMIT" --check'
+      }
+    }
+
+    stage('Build images') {
+      when { expression { return !params.DRY_RUN } }
+      steps {
+        sh 'docker build -f docker/Dockerfile.ops-runner -t ops-runner:ci .'
+        sh 'docker build -f docker/Dockerfile.ci-agent -t ci-agent:ci .'
+      }
+    }
+  }
+
+  post {
+    always {
+      cleanWs()
+    }
+    success {
+      echo 'cloud-ops-cicd-framework pipeline: SUCCESS'
+    }
+    failure {
+      echo 'cloud-ops-cicd-framework pipeline: FAILED'
+    }
+  }
+}

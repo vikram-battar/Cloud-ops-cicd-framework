@@ -1,0 +1,59 @@
+---
+# Baseline hardening: SSH lockdown + logrotate policy.
+# Dry-run first:
+#   ansible-playbook -i inventory.ini playbooks/hardening.yml --check
+- name: Baseline hardening for Linux hosts
+  hosts: all
+  become: true
+  vars:
+    sshd_service_name: sshd  # "ssh" on Debian/Ubuntu, "sshd" on RHEL
+    sshd_permit_root_login: "no"
+    sshd_password_authentication: "no"
+
+  tasks:
+    - name: Ensure OpenSSH server is installed
+      ansible.builtin.package:
+        name: openssh-server
+        state: present
+
+    - name: Disable SSH root login
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PermitRootLogin"
+        line: "PermitRootLogin {{ sshd_permit_root_login }}"
+        validate: "sshd -t -f %s"
+      notify: Restart sshd
+
+    - name: Disable SSH password authentication
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PasswordAuthentication"
+        line: "PasswordAuthentication {{ sshd_password_authentication }}"
+        validate: "sshd -t -f %s"
+      notify: Restart sshd
+
+    - name: Ensure logrotate is installed
+      ansible.builtin.package:
+        name: logrotate
+        state: present
+
+    - name: Install logrotate policy for application logs
+      ansible.builtin.copy:
+        dest: /etc/logrotate.d/app
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          /var/log/app/*.log {
+              weekly
+              rotate 8
+              compress
+              missingok
+              notifempty
+          }
+
+  handlers:
+    - name: Restart sshd
+      ansible.builtin.service:
+        name: "{{ sshd_service_name }}"
+        state: restarted

@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ops-agent
+  labels:
+    app: ops-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ops-agent
+  template:
+    metadata:
+      labels:
+        app: ops-agent
+    spec:
+      containers:
+        - name: ops-agent
+          # placeholder registry — build from docker/Dockerfile.ops-runner and retag
+          image: registry.example.com/ops-runner:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              python3 -m ops.inventory --pretty > /srv/status/inventory.json \
+              && exec python3 -m http.server 8080 --directory /srv/status
+          ports:
+            - containerPort: 8080
+              name: http
+          volumeMounts:
+            - name: status
+              mountPath: /srv/status
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+      volumes:
+        - name: status
+          emptyDir: {}

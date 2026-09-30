@@ -1,0 +1,68 @@
+# GitLab CI for cloud-ops-cicd-framework.
+# Secrets (e.g. SONAR_TOKEN) are expected as masked CI/CD variables —
+# nothing sensitive is stored in this file.
+stages:
+  - validate
+  - test
+  - sast
+  - iac-scan
+  - build
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+validate:python:
+  stage: validate
+  image: python:3.12-slim
+  script:
+    - python3 -m py_compile $(find ops tests -name "*.py")
+    - bash -n scripts/healthcheck.sh scripts/backup.sh
+    - python3 -c "import yaml, glob; [yaml.safe_load(open(f)) for f in glob.glob('ansible/**/*.yml', recursive=True) + glob.glob('k8s/*.yaml')]"
+
+pytest:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - pip install --quiet pytest
+    - python3 -m pytest tests/ -q --junitxml=report.xml
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+
+sonarqube-sast:
+  stage: sast
+  image: sonarsource/sonar-scanner-cli:latest
+  script:
+    - sonar-scanner -Dsonar.projectKey=cloud-ops-cicd-framework -Dsonar.login=$SONAR_TOKEN
+  allow_failure: true
+  rules:
+    - if: $SONAR_TOKEN == null
+      when: never
+    - when: on_success
+
+checkov-iac-scan:
+  stage: iac-scan
+  image: bridgecrew/checkov:latest
+  script:
+    - checkov -d ansible -d k8s --framework ansible,kubernetes --quiet --compact
+  allow_failure: true
+
+ansible-syntax-check:
+  stage: validate
+  image: python:3.12-slim
+  script:
+    - pip install --quiet ansible-core
+    - ansible-playbook --syntax-check ansible/playbooks/patching.yml
+    - ansible-playbook --syntax-check ansible/playbooks/hardening.yml
+
+docker-build:
+  stage: build
+  image: docker:24-cli
+  services:
+    - docker:24-dind
+  script:
+    - docker build -f docker/Dockerfile.ops-runner -t ops-runner:$CI_COMMIT_SHORT_SHA .
+    - docker build -f docker/Dockerfile.ci-agent -t ci-agent:$CI_COMMIT_SHORT_SHA .
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

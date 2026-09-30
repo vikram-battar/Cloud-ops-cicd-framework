@@ -1,0 +1,16 @@
+# EXAMPLE inventory — placeholder hosts only. Copy to inventory.ini and
+# replace with real hosts. Never commit real hostnames, IPs, or credentials.
+[web]
+web1.example.com
+web2.example.com
+
+[db]
+db1.example.com
+
+[ops:children]
+web
+db
+
+[all:vars]
+ansible_user=ops
+ansible_ssh_private_key_file=~/.ssh/id_ed25519

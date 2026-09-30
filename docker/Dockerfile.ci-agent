@@ -1,0 +1,14 @@
+# ci-agent: image used by CI jobs for lint, unit tests and scans.
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git curl bash shellcheck \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --quiet pytest pyyaml checkov
+
+WORKDIR /work
+CMD ["bash"]

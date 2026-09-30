@@ -1,0 +1,18 @@
+# ops-runner: python 3.12 + ansible for running the ops/ CLIs and playbooks.
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ansible openssh-client git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/ops
+COPY ops/ ./ops/
+COPY ansible/ ./ansible/
+COPY scripts/ ./scripts/
+
+ENTRYPOINT ["python3"]
+CMD ["-m", "ops.inventory", "--pretty"]

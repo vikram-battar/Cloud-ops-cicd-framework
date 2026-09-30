@@ -1,0 +1,17 @@
+---
+# common role: base packages every managed host should have.
+- name: Refresh apt cache (Debian/Ubuntu)
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_facts.pkg_mgr == "apt"
+
+- name: Install common base packages
+  ansible.builtin.package:
+    name: "{{ common_base_packages }}"
+    state: present
+
+- name: Ensure logrotate is present
+  ansible.builtin.package:
+    name: logrotate
+    state: present

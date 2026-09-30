@@ -1,0 +1,36 @@
+---
+# Apply OS package updates across Debian/Ubuntu and RHEL-family hosts.
+# Dry-run first:
+#   ansible-playbook -i inventory.ini playbooks/patching.yml --check
+- name: Apply OS package updates
+  hosts: all
+  become: true
+  vars:
+    patching_apt_upgrade: dist  # apt upgrade mode: dist | full | yes
+
+  tasks:
+    - name: Refresh apt cache (Debian/Ubuntu)
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_facts.pkg_mgr == "apt"
+
+    - name: Upgrade all packages (Debian/Ubuntu)
+      ansible.builtin.apt:
+        upgrade: "{{ patching_apt_upgrade }}"
+      when: ansible_facts.pkg_mgr == "apt"
+      register: apt_upgrade
+
+    - name: Upgrade all packages (RHEL family)
+      ansible.builtin.yum:
+        name: "*"
+        state: latest
+      when: ansible_facts.pkg_mgr in ["yum", "dnf"]
+      register: yum_upgrade
+
+    - name: Report upgrade pass result
+      ansible.builtin.debug:
+        msg: >-
+          patching pass complete on {{ inventory_hostname }}:
+          apt changed={{ apt_upgrade.changed | default(false) }},
+          yum changed={{ yum_upgrade.changed | default(false) }}

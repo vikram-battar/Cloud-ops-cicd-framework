@@ -1,0 +1,9 @@
+---
+# defaults for the common role
+common_base_packages:
+  - curl
+  - logrotate
+  - python3
+  - unzip
+
+sshd_service_name: sshd  # "ssh" on Debian/Ubuntu, "sshd" on RHEL

@@ -1,0 +1,27 @@
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ansible
+*.retry
+*.vault
+
+# IDE / editors
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# local inventory with real hosts (never commit)
+ansible/inventory.ini
+
+# test / build artifacts
+report.xml
+.cache/
+
+# pytest
+.pytest_cache/
